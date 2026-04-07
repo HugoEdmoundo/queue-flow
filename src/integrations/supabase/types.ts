@@ -14,7 +14,69 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      queue_settings: {
+        Row: {
+          created_at: string
+          current_queue_number: number | null
+          current_referral_code: string | null
+          id: string
+          next_queue_counter: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_queue_number?: number | null
+          current_referral_code?: string | null
+          id?: string
+          next_queue_counter?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_queue_number?: number | null
+          current_referral_code?: string | null
+          id?: string
+          next_queue_counter?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      registrations: {
+        Row: {
+          created_at: string
+          id: string
+          kk_number: string
+          name: string
+          queue_number: number
+          referral_code: string
+          rt_rw: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kk_number: string
+          name: string
+          queue_number: number
+          referral_code: string
+          rt_rw: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kk_number?: string
+          name?: string
+          queue_number?: number
+          referral_code?: string
+          rt_rw?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
