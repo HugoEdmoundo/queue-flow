@@ -1,6 +1,6 @@
 import type { Tables } from "@/integrations/supabase/types";
 
-type Registration = Tables<"registrations">;
+type Registration = Tables<"warga">;
 
 interface QueueTableProps {
   waiting: Registration[];

@@ -1,6 +1,6 @@
 
--- Create registrations table
-CREATE TABLE public.registrations (
+-- Create warga table
+CREATE TABLE public.warga (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   name TEXT NOT NULL,
   kk_number TEXT NOT NULL,
@@ -23,21 +23,21 @@ CREATE TABLE public.queue_settings (
 );
 
 -- Enable RLS
-ALTER TABLE public.registrations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.warga ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.queue_settings ENABLE ROW LEVEL SECURITY;
 
 -- Open policies (no auth required)
-CREATE POLICY "Anyone can view registrations" ON public.registrations FOR SELECT USING (true);
-CREATE POLICY "Anyone can insert registrations" ON public.registrations FOR INSERT WITH CHECK (true);
-CREATE POLICY "Anyone can update registrations" ON public.registrations FOR UPDATE USING (true);
-CREATE POLICY "Anyone can delete registrations" ON public.registrations FOR DELETE USING (true);
+CREATE POLICY "Anyone can view warga" ON public.warga FOR SELECT USING (true);
+CREATE POLICY "Anyone can insert warga" ON public.warga FOR INSERT WITH CHECK (true);
+CREATE POLICY "Anyone can update warga" ON public.warga FOR UPDATE USING (true);
+CREATE POLICY "Anyone can delete warga" ON public.warga FOR DELETE USING (true);
 
 CREATE POLICY "Anyone can view queue_settings" ON public.queue_settings FOR SELECT USING (true);
 CREATE POLICY "Anyone can insert queue_settings" ON public.queue_settings FOR INSERT WITH CHECK (true);
 CREATE POLICY "Anyone can update queue_settings" ON public.queue_settings FOR UPDATE USING (true);
 
 -- Enable realtime
-ALTER PUBLICATION supabase_realtime ADD TABLE public.registrations;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.warga;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.queue_settings;
 
 -- Insert default settings row
@@ -52,8 +52,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SET search_path = public;
 
-CREATE TRIGGER update_registrations_updated_at
-  BEFORE UPDATE ON public.registrations
+CREATE TRIGGER update_warga_updated_at
+  BEFORE UPDATE ON public.warga
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 CREATE TRIGGER update_queue_settings_updated_at

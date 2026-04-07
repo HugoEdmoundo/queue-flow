@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 
-type Registration = Tables<"registrations">;
+type Registration = Tables<"warga">;
 type QueueSettings = Tables<"queue_settings">;
 
 export function useQueueData() {
@@ -12,7 +12,7 @@ export function useQueueData() {
 
   const fetchData = async () => {
     const [regRes, settingsRes] = await Promise.all([
-      supabase.from("registrations").select("*").order("queue_number", { ascending: true }),
+      supabase.from("warga").select("*").order("queue_number", { ascending: true }),
       supabase.from("queue_settings").select("*").limit(1).single(),
     ]);
     if (regRes.data) setRegistrations(regRes.data);
@@ -24,8 +24,8 @@ export function useQueueData() {
     fetchData();
 
     const regChannel = supabase
-      .channel("registrations-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "registrations" }, () => {
+      .channel("warga-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "warga" }, () => {
         fetchData();
       })
       .subscribe();

@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, Pause, Clock, Trash2, CheckCircle, LayoutDashboard } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 
-type Registration = Tables<"registrations">;
+type Registration = Tables<"warga">;
 
 export default function AdminDashboard() {
   const { waiting, served, serving, pending, refetch } = useQueueData();
@@ -20,12 +20,12 @@ export default function AdminDashboard() {
   const handleNext = async () => {
     // Move current serving to served
     if (serving) {
-      await supabase.from("registrations").update({ status: "served" }).eq("id", serving.id);
+      await supabase.from("warga").update({ status: "served" }).eq("id", serving.id);
     }
     // Get next waiting
     if (waiting.length > 0) {
       const next = waiting[0];
-      await supabase.from("registrations").update({ status: "serving" }).eq("id", next.id);
+      await supabase.from("warga").update({ status: "serving" }).eq("id", next.id);
       await supabase
         .from("queue_settings")
         .update({ current_queue_number: next.queue_number, current_referral_code: next.referral_code })
@@ -42,12 +42,12 @@ export default function AdminDashboard() {
 
   const handlePending = async () => {
     if (!serving) return;
-    await supabase.from("registrations").update({ status: "pending" }).eq("id", serving.id);
+    await supabase.from("warga").update({ status: "pending" }).eq("id", serving.id);
     toast("Antrian ditunda", { description: `#${serving.queue_number} dipindahkan ke pending` });
     // Auto next
     if (waiting.length > 0) {
       const next = waiting[0];
-      await supabase.from("registrations").update({ status: "serving" }).eq("id", next.id);
+      await supabase.from("warga").update({ status: "serving" }).eq("id", next.id);
       await supabase
         .from("queue_settings")
         .update({ current_queue_number: next.queue_number, current_referral_code: next.referral_code })
@@ -63,10 +63,10 @@ export default function AdminDashboard() {
   const handleBack = async () => {
     if (!serving || served.length === 0) return;
     // Move current serving back to waiting
-    await supabase.from("registrations").update({ status: "waiting" }).eq("id", serving.id);
+    await supabase.from("warga").update({ status: "waiting" }).eq("id", serving.id);
     // Restore last served to serving
     const lastServed = served[served.length - 1];
-    await supabase.from("registrations").update({ status: "serving" }).eq("id", lastServed.id);
+    await supabase.from("warga").update({ status: "serving" }).eq("id", lastServed.id);
     await supabase
       .from("queue_settings")
       .update({ current_queue_number: lastServed.queue_number, current_referral_code: lastServed.referral_code })
@@ -75,17 +75,17 @@ export default function AdminDashboard() {
   };
 
   const handleAcceptPending = async (reg: Registration) => {
-    await supabase.from("registrations").update({ status: "waiting" }).eq("id", reg.id);
+    await supabase.from("warga").update({ status: "waiting" }).eq("id", reg.id);
     toast.success(`#${reg.queue_number} dikembalikan ke antrian`);
   };
 
   const handleDeletePending = async (reg: Registration) => {
-    await supabase.from("registrations").update({ status: "served" }).eq("id", reg.id);
+    await supabase.from("warga").update({ status: "served" }).eq("id", reg.id);
     toast(`#${reg.queue_number} dipindahkan ke sudah dilayani`);
   };
 
   const handleDeleteReg = async (reg: Registration) => {
-    await supabase.from("registrations").delete().eq("id", reg.id);
+    await supabase.from("warga").delete().eq("id", reg.id);
     setSelectedReg(null);
     toast.success("Data dihapus");
   };

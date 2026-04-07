@@ -41,7 +41,7 @@ export type Database = {
         }
         Relationships: []
       }
-      registrations: {
+      warga: {
         Row: {
           created_at: string
           id: string

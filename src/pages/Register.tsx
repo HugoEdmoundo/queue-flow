@@ -40,7 +40,7 @@ export default function Register() {
       const nextNumber = settings?.next_queue_counter || 1;
       const code = generateCode();
 
-      const { error } = await supabase.from("registrations").insert({
+      const { error } = await supabase.from("warga").insert({
         name: name.trim(),
         kk_number: kkNumber.trim(),
         rt_rw: rtRw.trim(),
