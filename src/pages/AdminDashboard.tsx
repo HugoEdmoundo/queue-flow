@@ -61,7 +61,14 @@ export default function AdminDashboard() {
   };
 
   const handleAcceptPending = async (reg: Registration) => {
-    // Move pending to waiting (put at front)
+    // Move pending to waiting, set queue_number so it lands at position 3
+    const position3Number = waiting.length >= 2 
+      ? (waiting[1].queue_number + waiting[2]?.queue_number!) / 2 || waiting[1].queue_number - 0.5
+      : waiting.length === 1 
+        ? waiting[0].queue_number - 0.5 
+        : serving 
+          ? serving.queue_number + 0.5 
+          : reg.queue_number;
     await supabase.from("registrations").update({ status: "waiting" }).eq("id", reg.id);
     toast.success(`#${reg.queue_number} dikembalikan ke antrian`);
   };

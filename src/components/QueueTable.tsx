@@ -69,7 +69,7 @@ export function QueueTable({ waiting, served, onRowClick }: QueueTableProps) {
                   </td>
                 </tr>
               ) : (
-                served.map((r) => (
+                [...served].reverse().map((r) => (
                   <tr
                     key={r.id}
                     className={`border-t hover:bg-success/5 transition-colors ${onRowClick ? "cursor-pointer" : ""}`}

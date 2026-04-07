@@ -89,8 +89,8 @@ export default function Register() {
             <p className="text-sm text-muted-foreground">
               Gunakan kode ini saat tiba di lokasi pengambilan
             </p>
-            <Button onClick={() => { setResult(null); setName(""); setKkNumber(""); setRtRw(""); }} variant="outline" className="w-full">
-              Daftar Lagi
+            <Button onClick={() => window.location.href = "/queue"} className="w-full">
+              Cek Antrian
             </Button>
           </CardContent>
         </Card>
@@ -116,11 +116,11 @@ export default function Register() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="kk">Nomor Kartu Keluarga</Label>
-              <Input id="kk" value={kkNumber} onChange={(e) => setKkNumber(e.target.value)} placeholder="Masukkan nomor KK" />
+              <Input id="kk" value={kkNumber} onChange={(e) => setKkNumber(e.target.value.replace(/\D/g, ""))} placeholder="Masukkan nomor KK" inputMode="numeric" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="rtrw">RT/RW</Label>
-              <Input id="rtrw" value={rtRw} onChange={(e) => setRtRw(e.target.value)} placeholder="Contoh: 001/002" />
+              <Input id="rtrw" value={rtRw} onChange={(e) => setRtRw(e.target.value.replace(/[^\d/]/g, ""))} placeholder="Contoh: 001/002" inputMode="numeric" />
             </div>
             <Button type="submit" className="w-full" disabled={submitting}>
               {submitting ? "Mendaftar..." : "Daftar Antrian"}
