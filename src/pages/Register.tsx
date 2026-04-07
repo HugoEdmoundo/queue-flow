@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +14,7 @@ export default function Register() {
   const [rtRw, setRtRw] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ code: string; number: number } | null>(null);
+  const navigate = useNavigate();
 
   const generateCode = () => {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -89,7 +91,7 @@ export default function Register() {
             <p className="text-sm text-muted-foreground">
               Gunakan kode ini saat tiba di lokasi pengambilan
             </p>
-            <Button onClick={() => window.location.href = "/queue"} className="w-full">
+            <Button onClick={() => navigate("/queue")} className="w-full">
               Cek Antrian
             </Button>
           </CardContent>
