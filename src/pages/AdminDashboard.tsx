@@ -60,8 +60,21 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleBack = async () => {
+    if (!serving || served.length === 0) return;
+    // Move current serving back to waiting
+    await supabase.from("registrations").update({ status: "waiting" }).eq("id", serving.id);
+    // Restore last served to serving
+    const lastServed = served[served.length - 1];
+    await supabase.from("registrations").update({ status: "serving" }).eq("id", lastServed.id);
+    await supabase
+      .from("queue_settings")
+      .update({ current_queue_number: lastServed.queue_number, current_referral_code: lastServed.referral_code })
+      .neq("id", "00000000-0000-0000-0000-000000000000");
+    toast.info(`Kembali ke antrian #${lastServed.queue_number}`);
+  };
+
   const handleAcceptPending = async (reg: Registration) => {
-    // Move pending to waiting (put at front)
     await supabase.from("registrations").update({ status: "waiting" }).eq("id", reg.id);
     toast.success(`#${reg.queue_number} dikembalikan ke antrian`);
   };
@@ -136,6 +149,10 @@ export default function AdminDashboard() {
             </div>
 
             <div className="flex items-center gap-4">
+              <Button size="lg" variant="outline" onClick={handleBack} disabled={!serving || served.length === 0}>
+                <ChevronLeft className="w-5 h-5 mr-2" />
+                Back
+              </Button>
               <Button size="lg" variant="outline" onClick={handlePending} disabled={!serving}>
                 <Pause className="w-5 h-5 mr-2" />
                 Pending
