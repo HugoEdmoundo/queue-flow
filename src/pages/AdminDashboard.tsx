@@ -60,10 +60,23 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleBack = async () => {
+    if (!serving || served.length === 0) return;
+    // Move current serving back to waiting
+    await supabase.from("registrations").update({ status: "waiting" }).eq("id", serving.id);
+    // Restore last served to serving
+    const lastServed = served[served.length - 1];
+    await supabase.from("registrations").update({ status: "serving" }).eq("id", lastServed.id);
+    await supabase
+      .from("queue_settings")
+      .update({ current_queue_number: lastServed.queue_number, current_referral_code: lastServed.referral_code })
+      .neq("id", "00000000-0000-0000-0000-000000000000");
+    toast.info(`Kembali ke antrian #${lastServed.queue_number}`);
+  };
+
   const handleAcceptPending = async (reg: Registration) => {
     await supabase.from("registrations").update({ status: "waiting" }).eq("id", reg.id);
     toast.success(`#${reg.queue_number} dikembalikan ke antrian`);
-  };
   };
 
   const handleDeletePending = async (reg: Registration) => {
