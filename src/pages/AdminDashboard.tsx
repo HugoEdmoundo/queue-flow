@@ -174,52 +174,52 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            {mode === "control" && (
-              <div className="flex items-center gap-2 rounded-full border border-input bg-background px-3 py-2 shadow-sm">
-                <Search className="w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Cari antrian..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="min-w-[180px] border-none shadow-none focus:ring-0"
-                />
-              </div>
-            )}
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant={mode === "control" ? "default" : "outline"}
-                onClick={() => setMode("control")}
-              >
-                <Table2 className="w-4 h-4 mr-1" />
-                Antrian
-              </Button>
-              <Button
-                size="sm"
-                variant={mode === "periode" ? "default" : "outline"}
-                onClick={() => setMode("periode")}
-              >
-                <CalendarDays className="w-4 h-4 mr-1" />
-                Periode
-              </Button>
-              {mode === "control" && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowPending(true)}
-                  className="relative"
-                >
-                  <Clock className="w-4 h-4 mr-1" />
-                  Terlewat
-                  {pending.length > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground text-[10px] rounded-full w-5 h-5 flex items-center justify-center">
-                      {pending.length}
-                    </span>
-                  )}
-                </Button>
-              )}
+          <div className="flex items-center gap-2">
+            {/* Search — selalu ada di kiri */}
+            <div className="flex items-center gap-2 rounded-full border border-input bg-background px-3 py-2 shadow-sm h-9">
+              <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+              <Input
+                placeholder="Cari antrian..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="border-none shadow-none focus:ring-0 h-auto py-0 text-sm w-[140px]"
+              />
             </div>
+
+            {/* Tengah: Terlewat (mode antrian) atau Tambah Periode (mode periode) */}
+            {mode === "control" ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowPending(true)}
+                className="relative"
+              >
+                <Clock className="w-4 h-4 mr-1" />
+                Terlewat
+                {pending.length > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground text-[10px] rounded-full w-5 h-5 flex items-center justify-center">
+                    {pending.length}
+                  </span>
+                )}
+              </Button>
+            ) : (
+              <Button size="sm" onClick={handleCreatePeriode}>
+                <Plus className="w-4 h-4 mr-1" /> Tambah Periode
+              </Button>
+            )}
+
+            {/* Kanan: toggle mode */}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setMode(mode === "control" ? "periode" : "control")}
+            >
+              {mode === "control" ? (
+                <><CalendarDays className="w-4 h-4 mr-1" /> Periode</>
+              ) : (
+                <><Table2 className="w-4 h-4 mr-1" /> Antrian</>
+              )}
+            </Button>
           </div>
         </div>
       </header>
@@ -305,9 +305,6 @@ export default function AdminDashboard() {
                 <p className="text-sm text-muted-foreground">Periode aktif</p>
                 <p className="text-lg font-semibold text-foreground">{activePeriode?.name ?? "Tidak ada"}</p>
               </div>
-              <Button size="sm" onClick={handleCreatePeriode}>
-                <Plus className="w-4 h-4 mr-1" /> Tambah Periode
-              </Button>
             </div>
 
             <div className="overflow-x-auto pb-2">
