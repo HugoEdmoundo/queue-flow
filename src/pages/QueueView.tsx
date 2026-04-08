@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQueueData } from "@/hooks/useQueueData";
+import { usePeriodeData } from "@/hooks/usePeriodeData";
 import { QueueTable } from "@/components/QueueTable";
 import { ServingCard } from "@/components/ServingCard";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,8 @@ export default function QueueView() {
   const [code, setCode] = useState("");
   const [entered, setEntered] = useState(false);
   const [enteredCode, setEnteredCode] = useState("");
-  const { waiting, served, serving, registrations } = useQueueData();
+  const { activePeriode } = usePeriodeData();
+  const { waiting, served, serving, registrations } = useQueueData(activePeriode?.id);
 
   const myReg = registrations.find((r) => r.referral_code === enteredCode);
   const isExpired = myReg?.status === "served";
@@ -72,7 +74,6 @@ export default function QueueView() {
 
   return (
     <div className="min-h-screen bg-background p-4 space-y-4 max-w-4xl mx-auto">
-      {/* My queue number */}
       {myReg && (
         <div className="bg-primary text-primary-foreground rounded-xl px-6 py-4 text-center">
           <p className="text-xs uppercase tracking-widest opacity-80 mb-1">Nomor Antrian Anda</p>
@@ -87,10 +88,7 @@ export default function QueueView() {
         </div>
       )}
 
-      {/* Currently serving */}
       <ServingCard serving={serving} />
-
-      {/* Queue tables */}
       <QueueTable waiting={waiting} served={served} />
     </div>
   );

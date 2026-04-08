@@ -32,14 +32,26 @@ export default function Register() {
     setSubmitting(true);
 
     try {
-      // Get next queue number
+      // Get active periode
+      const { data: activePeriode } = await supabase
+        .from("periodes")
+        .select("id")
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (!activePeriode) {
+        toast.error("Tidak ada periode aktif. Hubungi admin.");
+        return;
+      }
+
+      // Get queue_settings for this periode
       const { data: settings } = await supabase
         .from("queue_settings")
         .select("*")
-        .limit(1)
-        .single();
+        .eq("periode_id", activePeriode.id)
+        .maybeSingle();
 
-      const nextNumber = settings?.next_queue_counter || 1;
+      const nextNumber = settings?.next_queue_counter ?? 1;
       const code = generateCode();
 
       const { error } = await supabase.from("warga").insert({
@@ -49,15 +61,17 @@ export default function Register() {
         referral_code: code,
         queue_number: nextNumber,
         status: "waiting",
+        periode_id: activePeriode.id,
       });
 
       if (error) throw error;
 
-      // Increment counter
-      await supabase
-        .from("queue_settings")
-        .update({ next_queue_counter: nextNumber + 1 })
-        .eq("id", settings!.id);
+      if (settings) {
+        await supabase
+          .from("queue_settings")
+          .update({ next_queue_counter: nextNumber + 1 })
+          .eq("id", settings.id);
+      }
 
       setResult({ code, number: nextNumber });
       toast.success("Registrasi berhasil!");

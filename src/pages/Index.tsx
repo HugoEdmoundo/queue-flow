@@ -7,7 +7,7 @@ export default function Index() {
   const links = [
     { to: "/register", icon: UserPlus, title: "Daftar Antrian", desc: "Isi data dan dapatkan nomor antrian", color: "bg-primary/10 text-primary" },
     { to: "/queue", icon: KeyRound, title: "Cek Antrian", desc: "Lihat status antrian Anda", color: "bg-accent/10 text-accent" },
-    { to: "/control", icon: LayoutDashboard, title: "Admin Dashboard", desc: "Kelola antrian", color: "bg-serving/10 text-serving" },
+    { to: "/control", icon: LayoutDashboard, title: "Control", desc: "Kelola antrian & periode", color: "bg-serving/10 text-serving" },
     { to: "/display", icon: Monitor, title: "Display TV", desc: "Tampilan untuk layar publik", color: "bg-success/10 text-success" },
   ];
 

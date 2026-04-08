@@ -6,11 +6,15 @@ interface QueueTableProps {
   waiting: Registration[];
   served: Registration[];
   onRowClick?: (reg: Registration) => void;
+  limit?: number;
 }
 
-export function QueueTable({ waiting, served, onRowClick }: QueueTableProps) {
+export function QueueTable({ waiting, served, onRowClick, limit = 10 }: QueueTableProps) {
+  const visibleWaiting = waiting.slice(0, limit);
+  const visibleServed = [...served].reverse().slice(0, limit);
+
   return (
-    <div className="grid grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
       {/* Left - Waiting */}
       <div>
         <h3 className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
@@ -25,14 +29,14 @@ export function QueueTable({ waiting, served, onRowClick }: QueueTableProps) {
               </tr>
             </thead>
             <tbody>
-              {waiting.length === 0 ? (
+              {visibleWaiting.length === 0 ? (
                 <tr>
                   <td colSpan={2} className="px-3 py-4 text-center text-muted-foreground">
                     Tidak ada antrian
                   </td>
                 </tr>
               ) : (
-                waiting.map((r) => (
+                visibleWaiting.map((r) => (
                   <tr
                     key={r.id}
                     className={`border-t hover:bg-muted/30 transition-colors ${onRowClick ? "cursor-pointer" : ""}`}
@@ -62,14 +66,14 @@ export function QueueTable({ waiting, served, onRowClick }: QueueTableProps) {
               </tr>
             </thead>
             <tbody>
-              {served.length === 0 ? (
+              {visibleServed.length === 0 ? (
                 <tr>
                   <td colSpan={2} className="px-3 py-4 text-center text-muted-foreground">
                     Belum ada
                   </td>
                 </tr>
               ) : (
-                [...served].reverse().map((r) => (
+                visibleServed.map((r) => (
                   <tr
                     key={r.id}
                     className={`border-t hover:bg-success/5 transition-colors ${onRowClick ? "cursor-pointer" : ""}`}
