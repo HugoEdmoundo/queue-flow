@@ -25,6 +25,7 @@ import type { Tables } from "@/integrations/supabase/types";
 type Registration = Tables<"warga">;
 type Mode = "control" | "periode";
 
+
 export default function AdminDashboard() {
   const [mode, setMode] = useState<Mode>("control");
   const { periodes, activePeriode, createPeriode, activatePeriode } = usePeriodeData();
@@ -33,6 +34,8 @@ export default function AdminDashboard() {
   const [showPending, setShowPending] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedPeriodeId, setSelectedPeriodeId] = useState<string | null>(null);
+  const [showAddPeriode, setShowAddPeriode] = useState(false);
+  const [newPeriodeName, setNewPeriodeName] = useState("");
 
   const query = search.trim().toLowerCase();
   const matchesSearch = (reg: Registration) => {
@@ -135,11 +138,12 @@ export default function AdminDashboard() {
   };
 
   const handleCreatePeriode = async () => {
-    const name = window.prompt("Nama periode baru", `Periode ${periodes.length + 1}`)?.trim();
-    if (!name) return;
+    if (!newPeriodeName.trim()) return;
     try {
-      await createPeriode(name);
-      toast.success(`Periode "${name}" dibuat`);
+      await createPeriode(newPeriodeName.trim());
+      toast.success(`Periode "${newPeriodeName.trim()}" dibuat`);
+      setNewPeriodeName("");
+      setShowAddPeriode(false);
     } catch {
       toast.error("Gagal membuat periode");
     }
@@ -203,7 +207,7 @@ export default function AdminDashboard() {
                 )}
               </Button>
             ) : (
-              <Button size="sm" onClick={handleCreatePeriode}>
+              <Button size="sm" onClick={() => { setNewPeriodeName(`Periode ${periodes.length + 1}`); setShowAddPeriode(true); }}>
                 <Plus className="w-4 h-4 mr-1" /> Tambah Periode
               </Button>
             )}
@@ -435,6 +439,27 @@ export default function AdminDashboard() {
                 </div>
               ))
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+      {/* Dialog tambah periode */}
+      <Dialog open={showAddPeriode} onOpenChange={(o) => { setShowAddPeriode(o); if (!o) setNewPeriodeName(""); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Tambah Periode</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Input
+              placeholder="Nama periode"
+              value={newPeriodeName}
+              onChange={(e) => setNewPeriodeName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleCreatePeriode()}
+              autoFocus
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setShowAddPeriode(false)}>Batal</Button>
+              <Button size="sm" onClick={handleCreatePeriode} disabled={!newPeriodeName.trim()}>Buat</Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
