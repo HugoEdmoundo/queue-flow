@@ -1,6 +1,4 @@
-import type { Tables } from "@/integrations/supabase/types";
-
-type Registration = Tables<"warga">;
+import type { Registration } from "@/lib/api";
 
 interface QueueTableProps {
   waiting: Registration[];
@@ -15,7 +13,6 @@ export function QueueTable({ waiting, served, onRowClick, limit = 10 }: QueueTab
 
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-      {/* Left - Waiting */}
       <div>
         <h3 className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
           Belum Dilayani
@@ -52,7 +49,6 @@ export function QueueTable({ waiting, served, onRowClick, limit = 10 }: QueueTab
         </div>
       </div>
 
-      {/* Right - Served */}
       <div>
         <h3 className="text-sm font-semibold text-success mb-2 uppercase tracking-wide">
           Sudah Dilayani

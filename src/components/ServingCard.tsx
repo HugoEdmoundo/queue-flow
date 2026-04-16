@@ -1,6 +1,4 @@
-import type { Tables } from "@/integrations/supabase/types";
-
-type Registration = Tables<"warga">;
+import type { Registration } from "@/lib/api";
 
 interface ServingCardProps {
   serving: Registration | undefined;

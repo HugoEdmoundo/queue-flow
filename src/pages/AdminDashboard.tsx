@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useQueueData } from "@/hooks/useQueueData";
 import { usePeriodeData } from "@/hooks/usePeriodeData";
 import { QueueTable } from "@/components/QueueTable";
-import { supabase } from "@/integrations/supabase/client";
+import { registrationApi, queueApi } from "@/lib/api";
+import type { Registration } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -20,16 +21,13 @@ import {
   Plus,
   Table2,
 } from "lucide-react";
-import type { Tables } from "@/integrations/supabase/types";
 
-type Registration = Tables<"warga">;
 type Mode = "control" | "periode";
-
 
 export default function AdminDashboard() {
   const [mode, setMode] = useState<Mode>("control");
   const { periodes, activePeriode, createPeriode, activatePeriode } = usePeriodeData();
-  const { waiting, served, serving, pending, settings } = useQueueData(activePeriode?.id);
+  const { waiting, served, serving, pending, settings, refetch } = useQueueData(activePeriode?.id);
   const [selectedReg, setSelectedReg] = useState<Registration | null>(null);
   const [showPending, setShowPending] = useState(false);
   const [search, setSearch] = useState("");
@@ -48,92 +46,66 @@ export default function AdminDashboard() {
   const filteredWaiting = waiting.filter(matchesSearch);
   const filteredServed = served.filter(matchesSearch);
 
-  // Next: serving → served (table kanan), waiting[0] → serving
   const handleNext = async () => {
-    if (!settings) return;
-    if (serving) {
-      await supabase.from("warga").update({ status: "served" }).eq("id", serving.id);
-    }
-    if (waiting.length > 0) {
-      const next = waiting[0];
-      await supabase.from("warga").update({ status: "serving" }).eq("id", next.id);
-      await supabase
-        .from("queue_settings")
-        .update({ current_queue_number: next.queue_number, current_referral_code: next.referral_code })
-        .eq("id", settings.id);
-      toast.success(`Memanggil antrian #${next.queue_number}`);
-    } else {
-      await supabase
-        .from("queue_settings")
-        .update({ current_queue_number: 0, current_referral_code: "" })
-        .eq("id", settings.id);
-      toast.info("Semua antrian sudah selesai");
+    try {
+      await queueApi.next();
+      await refetch();
+      if (waiting.length > 0) {
+        toast.success(`Memanggil antrian #${waiting[0].queue_number}`);
+      } else {
+        toast.info("Semua antrian sudah selesai");
+      }
+    } catch (e) {
+      toast.error("Gagal: " + (e instanceof Error ? e.message : String(e)));
     }
   };
 
-  // Back: serving → waiting, served terakhir → serving
   const handleBack = async () => {
-    if (!settings) return;
-    if (serving) {
-      await supabase.from("warga").update({ status: "waiting" }).eq("id", serving.id);
-    }
-    if (served.length > 0) {
-      const lastServed = served[served.length - 1];
-      await supabase.from("warga").update({ status: "serving" }).eq("id", lastServed.id);
-      await supabase
-        .from("queue_settings")
-        .update({ current_queue_number: lastServed.queue_number, current_referral_code: lastServed.referral_code })
-        .eq("id", settings.id);
-      toast.info(`Kembali ke antrian #${lastServed.queue_number}`);
-    } else {
-      await supabase
-        .from("queue_settings")
-        .update({ current_queue_number: 0, current_referral_code: "" })
-        .eq("id", settings.id);
+    try {
+      await queueApi.back();
+      await refetch();
+      if (served.length > 0) {
+        toast.info(`Kembali ke antrian #${served[served.length - 1].queue_number}`);
+      }
+    } catch (e) {
+      toast.error("Gagal: " + (e instanceof Error ? e.message : String(e)));
     }
   };
 
-  // Pending: serving → pending (hilang dari slide, masuk popup terlewat)
   const handlePending = async () => {
-    if (!serving || !settings) return;
-    await supabase.from("warga").update({ status: "pending" }).eq("id", serving.id);
-    toast("Antrian ditunda", { description: `#${serving.queue_number} masuk ke terlewat` });
-    if (waiting.length > 0) {
-      const next = waiting[0];
-      await supabase.from("warga").update({ status: "serving" }).eq("id", next.id);
-      await supabase
-        .from("queue_settings")
-        .update({ current_queue_number: next.queue_number, current_referral_code: next.referral_code })
-        .eq("id", settings.id);
-    } else {
-      await supabase
-        .from("queue_settings")
-        .update({ current_queue_number: 0, current_referral_code: "" })
-        .eq("id", settings.id);
+    if (!serving) return;
+    try {
+      await queueApi.pending();
+      await refetch();
+      toast("Antrian ditunda", { description: `#${serving.queue_number} masuk ke terlewat` });
+    } catch (e) {
+      toast.error("Gagal: " + (e instanceof Error ? e.message : String(e)));
     }
   };
 
-  // Accept pending: masuk ke table kanan (served)
   const handleAcceptPending = async (reg: Registration) => {
-    await supabase.from("warga").update({ status: "served" }).eq("id", reg.id);
+    await registrationApi.update(reg.id, { status: "served" });
+    await refetch();
     toast.success(`#${reg.queue_number} dipindahkan ke sudah dilayani`);
   };
 
-  // Delete pending: hapus total dari kedua table
   const handleDeletePending = async (reg: Registration) => {
-    await supabase.from("warga").delete().eq("id", reg.id);
+    await registrationApi.delete(reg.id);
+    await refetch();
     toast(`#${reg.queue_number} dihapus`);
   };
 
   const handleDeleteReg = async (reg: Registration) => {
-    await supabase.from("warga").delete().eq("id", reg.id);
+    await registrationApi.delete(reg.id);
     setSelectedReg(null);
+    await refetch();
     toast.success("Data dihapus");
   };
 
   const handleClearReg = async (reg: Registration) => {
-    await supabase.from("warga").update({ status: "served" }).eq("id", reg.id);
+    await registrationApi.update(reg.id, { status: "served" });
     setSelectedReg(null);
+    await refetch();
     toast.success(`#${reg.queue_number} dimasukkan ke sudah dilayani`);
   };
 
@@ -179,7 +151,6 @@ export default function AdminDashboard() {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Search — selalu ada di kiri */}
             <div className="flex items-center gap-2 rounded-full border border-input bg-background px-3 py-2 shadow-sm h-9">
               <Search className="w-4 h-4 text-muted-foreground shrink-0" />
               <Input
@@ -190,14 +161,8 @@ export default function AdminDashboard() {
               />
             </div>
 
-            {/* Tengah: Terlewat (mode antrian) atau Tambah Periode (mode periode) */}
             {mode === "control" ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowPending(true)}
-                className="relative"
-              >
+              <Button variant="outline" size="sm" onClick={() => setShowPending(true)} className="relative">
                 <Clock className="w-4 h-4 mr-1" />
                 Terlewat
                 {pending.length > 0 && (
@@ -212,12 +177,7 @@ export default function AdminDashboard() {
               </Button>
             )}
 
-            {/* Kanan: toggle mode */}
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setMode(mode === "control" ? "periode" : "control")}
-            >
+            <Button size="sm" variant="outline" onClick={() => setMode(mode === "control" ? "periode" : "control")}>
               {mode === "control" ? (
                 <><CalendarDays className="w-4 h-4 mr-1" /> Periode</>
               ) : (
@@ -229,10 +189,8 @@ export default function AdminDashboard() {
       </header>
 
       <div className="p-4 max-w-6xl mx-auto space-y-6">
-        {/* ── CONTROL MODE ── */}
         {mode === "control" && (
           <>
-            {/* Serving card segi panjang: No | Kode + 3 tombol */}
             <div className="rounded-2xl border bg-serving text-serving-foreground px-6 py-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between shadow">
               <div>
                 <p className="text-xs uppercase tracking-widest opacity-70 mb-1">Sedang Dilayani</p>
@@ -247,7 +205,6 @@ export default function AdminDashboard() {
                 )}
               </div>
               <div className="flex gap-2 flex-wrap">
-                {/* Back: kembali ke no sebelumnya */}
                 <Button
                   variant="outline"
                   size="sm"
@@ -257,7 +214,6 @@ export default function AdminDashboard() {
                 >
                   <ChevronLeft className="w-4 h-4 mr-1" /> Back
                 </Button>
-                {/* Pending: masuk ke terlewat */}
                 <Button
                   variant="outline"
                   size="sm"
@@ -267,7 +223,6 @@ export default function AdminDashboard() {
                 >
                   <Pause className="w-4 h-4 mr-1" /> Pending
                 </Button>
-                {/* Next: lanjut ke antrian berikutnya */}
                 <Button
                   size="sm"
                   onClick={handleNext}
@@ -279,7 +234,6 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* Stats */}
             <div className="grid gap-4 md:grid-cols-3">
               <div className="rounded-3xl border border-input bg-card p-4">
                 <p className="text-sm text-muted-foreground">Belum dilayani</p>
@@ -301,7 +255,6 @@ export default function AdminDashboard() {
           </>
         )}
 
-        {/* ── PERIODE MODE ── */}
         {mode === "periode" && (
           <section className="rounded-3xl border bg-card p-4">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-4">
@@ -410,7 +363,7 @@ export default function AdminDashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog terlewat (pending) */}
+      {/* Dialog terlewat */}
       <Dialog open={showPending} onOpenChange={setShowPending}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -427,11 +380,9 @@ export default function AdminDashboard() {
                     <span className="text-muted-foreground ml-2 font-mono text-sm">{r.referral_code}</span>
                   </div>
                   <div className="flex gap-1">
-                    {/* Accept: masuk ke table kanan (sudah dilayani) */}
                     <Button size="sm" variant="outline" onClick={() => handleAcceptPending(r)}>
                       <CheckCircle className="w-4 h-4 mr-1" /> Accept
                     </Button>
-                    {/* Delete: hapus total dari kedua table */}
                     <Button size="sm" variant="destructive" onClick={() => handleDeletePending(r)}>
                       <Trash2 className="w-4 h-4" />
                     </Button>
@@ -442,6 +393,7 @@ export default function AdminDashboard() {
           </div>
         </DialogContent>
       </Dialog>
+
       {/* Dialog tambah periode */}
       <Dialog open={showAddPeriode} onOpenChange={(o) => { setShowAddPeriode(o); if (!o) setNewPeriodeName(""); }}>
         <DialogContent className="max-w-sm">
