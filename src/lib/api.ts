@@ -1,4 +1,4 @@
-const BASE_URL = import.meta.env.VITE_API_URL ?? "https://queue-api.hugoedm.fun";
+const BASE_URL = import.meta.env.VITE_API_URL ?? "https://api-queue.hugoedm.fun";
 const WS_URL = BASE_URL.replace(/^https/, "wss").replace(/^http/, "ws");
 
 // ── Types ──────────────────────────────────────────────────────────────────
