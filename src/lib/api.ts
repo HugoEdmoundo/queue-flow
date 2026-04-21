@@ -43,9 +43,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
-    throw new Error(text || `HTTP ${res.status}`);
+    // Try to extract detail from JSON error body
+    try {
+      const json = JSON.parse(text);
+      throw new Error(json.detail ?? text);
+    } catch (parseErr) {
+      if (parseErr instanceof SyntaxError) throw new Error(text || `HTTP ${res.status}`);
+      throw parseErr;
+    }
   }
-  // DELETE returns empty body
   if (res.status === 204 || res.headers.get("content-length") === "0") {
     return undefined as T;
   }

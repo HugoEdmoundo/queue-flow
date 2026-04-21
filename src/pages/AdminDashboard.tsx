@@ -56,7 +56,7 @@ export default function AdminDashboard() {
         toast.info("Semua antrian sudah selesai");
       }
     } catch (e) {
-      toast.error("Gagal: " + (e instanceof Error ? e.message : String(e)));
+      toast.error(e instanceof Error ? e.message : "Gagal next antrian");
     }
   };
 
@@ -68,7 +68,7 @@ export default function AdminDashboard() {
         toast.info(`Kembali ke antrian #${served[served.length - 1].queue_number}`);
       }
     } catch (e) {
-      toast.error("Gagal: " + (e instanceof Error ? e.message : String(e)));
+      toast.error(e instanceof Error ? e.message : "Gagal back antrian");
     }
   };
 
@@ -79,7 +79,7 @@ export default function AdminDashboard() {
       await refetch();
       toast("Antrian ditunda", { description: `#${serving.queue_number} masuk ke terlewat` });
     } catch (e) {
-      toast.error("Gagal: " + (e instanceof Error ? e.message : String(e)));
+      toast.error(e instanceof Error ? e.message : "Gagal pending antrian");
     }
   };
 
@@ -132,7 +132,10 @@ export default function AdminDashboard() {
     }
   };
 
+  // Back: bisa selama masih ada data served
   const canBack = served.length > 0;
+  // Next: bisa selama ada waiting atau sedang serving
+  const canNext = waiting.length > 0 || !!serving;
 
   return (
     <div className="min-h-screen bg-background">
@@ -226,7 +229,7 @@ export default function AdminDashboard() {
                 <Button
                   size="sm"
                   onClick={handleNext}
-                  disabled={!serving && waiting.length === 0}
+                  disabled={!canNext}
                   className="bg-white/20 border-white/30 text-serving-foreground hover:bg-white/30 border"
                 >
                   Next <ChevronRight className="w-4 h-4 ml-1" />
