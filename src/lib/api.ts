@@ -1,4 +1,4 @@
-const BASE_URL = import.meta.env.VITE_API_URL ?? "https://api-queue.hugoedm.fun";
+const BASE_URL = (import.meta.env.VITE_API_URL ?? "https://api-queue.hugoedm.fun").replace(/\/$/, "");
 const WS_URL = BASE_URL.replace(/^https/, "wss").replace(/^http/, "ws");
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -43,10 +43,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
-    // Try to extract detail from JSON error body
     try {
       const json = JSON.parse(text);
-      throw new Error(json.detail ?? text);
+      throw new Error(json.detail ?? json.message ?? text);
     } catch (parseErr) {
       if (parseErr instanceof SyntaxError) throw new Error(text || `HTTP ${res.status}`);
       throw parseErr;
@@ -59,15 +58,25 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 // ── Periodes ───────────────────────────────────────────────────────────────
-// NOTE: activate/update/delete use /api/{id} not /api/periodes/{id}
 
 export const periodeApi = {
   getAll: () => request<Periode[]>("/api/periodes"),
 
-  // /api/periodes/active is broken on server — derive from getAll instead
+  // Response: { message: string, data: Periode }
+  // Falls back to getAll() if /active returns 404
   getActive: async (): Promise<Periode | null> => {
-    const all = await request<Periode[]>("/api/periodes");
-    return all.find((p) => p.is_active) ?? null;
+    try {
+      const res = await request<{ message: string; data: Periode }>("/api/periodes/active");
+      return res?.data ?? null;
+    } catch {
+      // Fallback: derive from getAll if /active not available
+      try {
+        const all = await request<Periode[]>("/api/periodes");
+        return all.find((p) => p.is_active) ?? null;
+      } catch {
+        return null;
+      }
+    }
   },
 
   create: (name: string) =>
@@ -76,24 +85,22 @@ export const periodeApi = {
       body: JSON.stringify({ name, is_active: false }),
     }),
 
-  // Correct path: /api/{periode_id}/activate
+  // PATCH /api/periodes/{id}/activate
   activate: (id: string) =>
-    request<Periode>(`/api/${id}/activate`, { method: "PATCH" }),
+    request<Periode>(`/api/periodes/${id}/activate`, { method: "PATCH" }),
 
-  // Correct path: /api/{periode_id}
   update: (id: string, data: Partial<Pick<Periode, "name" | "is_active">>) =>
-    request<Periode>(`/api/${id}`, {
+    request<Periode>(`/api/periodes/${id}`, {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
 
   delete: (id: string) =>
-    request<void>(`/api/${id}`, { method: "DELETE" }),
+    request<{ message: string }>(`/api/periodes/${id}`, { method: "DELETE" }),
 };
 
 // ── Registrations ──────────────────────────────────────────────────────────
-// NOTE: query param is "periodeId" (camelCase), rt_rw must be "NNN:NNN"
-// API auto-generates referral_code and queue_number — do NOT send them
+// rt_rw must be exactly "XXX:XXX" (3 digits : 3 digits)
 
 export const registrationApi = {
   getAll: (params?: { periodeId?: string; status?: string }) => {
@@ -103,12 +110,10 @@ export const registrationApi = {
     return request<Registration[]>(`/api/registrations${qs}`);
   },
 
-  getById: (id: string) => request<Registration>(`/api/registrations/${id}`),
-
   create: (data: {
     name: string;
-    kk_number: string;
-    rt_rw: string; // must be "NNN:NNN"
+    kk_number: string; // exactly 16 digits
+    rt_rw: string;     // exactly "XXX:XXX"
     periode_id: string;
   }) =>
     request<Registration>("/api/registrations", {
@@ -142,32 +147,23 @@ export const queueSettingsApi = {
       method: "POST",
       body: JSON.stringify(data),
     }),
-
-  update: (
-    id: string,
-    data: Partial<
-      Pick<QueueSettings, "current_queue_number" | "current_referral_code" | "next_queue_counter">
-    >
-  ) =>
-    request<QueueSettings>(`/api/queue-settings/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify(data),
-    }),
 };
 
 // ── Queue Operations ───────────────────────────────────────────────────────
-// NOTE: API does not accept a body — queue ops work on the active periode
 
 export const queueApi = {
   next: () =>
-    request<{ message: string; serving?: Registration; settings?: QueueSettings }>(
+    request<{ message: string; current_queue?: Registration }>(
       "/api/queue/next",
       { method: "POST" }
     ),
   pending: () =>
-    request<{ message: string }>("/api/queue/pending", { method: "POST" }),
+    request<{ message: string; current_serving?: Partial<Registration>; pending?: Partial<Registration> }>(
+      "/api/queue/pending",
+      { method: "POST" }
+    ),
   back: () =>
-    request<{ message: string; serving?: Registration; settings?: QueueSettings }>(
+    request<{ message: string; current_serving?: Partial<Registration>; previous_serving?: Partial<Registration> }>(
       "/api/queue/back",
       { method: "POST" }
     ),
@@ -183,11 +179,10 @@ export function createWebSocket(onMessage: (data: unknown) => void): { close: ()
 
   function connect() {
     if (closed) return;
-
     ws = new WebSocket(`${WS_URL}/ws`);
 
     ws.onopen = () => {
-      retryDelay = 1000; // reset backoff on successful connect
+      retryDelay = 1000;
     };
 
     ws.onmessage = (e) => {
@@ -202,17 +197,14 @@ export function createWebSocket(onMessage: (data: unknown) => void): { close: ()
       ws = null;
       if (!closed) {
         retryTimeout = setTimeout(() => {
-          retryDelay = Math.min(retryDelay * 2, 30000); // exponential backoff, max 30s
+          retryDelay = Math.min(retryDelay * 2, 30000);
           connect();
         }, retryDelay);
       }
     };
 
     ws.onerror = () => {
-      // onclose will fire after onerror, so just close cleanly
-      if (ws?.readyState !== WebSocket.CLOSED) {
-        ws?.close();
-      }
+      if (ws?.readyState !== WebSocket.CLOSED) ws?.close();
     };
   }
 
@@ -221,13 +213,8 @@ export function createWebSocket(onMessage: (data: unknown) => void): { close: ()
   return {
     close() {
       closed = true;
-      if (retryTimeout) {
-        clearTimeout(retryTimeout);
-        retryTimeout = null;
-      }
-      if (ws && ws.readyState !== WebSocket.CLOSED) {
-        ws.close();
-      }
+      if (retryTimeout) { clearTimeout(retryTimeout); retryTimeout = null; }
+      if (ws && ws.readyState !== WebSocket.CLOSED) ws.close();
       ws = null;
     },
   };

@@ -29,21 +29,24 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     if (busyRef.current) return;
     busyRef.current = true;
     try {
-      // Always fetch periodes first
-      const allPeriodes = await periodeApi.getAll();
-      const active = allPeriodes.find((p) => p.is_active) ?? null;
+      // Fetch periodes + active in parallel
+      const [allPeriodes, active] = await Promise.all([
+        periodeApi.getAll(),
+        periodeApi.getActive(),
+      ]);
       setPeriodes(allPeriodes);
-      setActivePeriode(active);
+      const resolvedActive = active ?? null;
+      setActivePeriode(resolvedActive);
 
-      if (!active) {
+      if (!resolvedActive?.id) {
         setRegistrations([]);
         setSettings(null);
         return;
       }
 
       const [regs, s] = await Promise.all([
-        registrationApi.getAll({ periodeId: active.id }),
-        queueSettingsApi.getByPeriode(active.id).catch(() => null),
+        registrationApi.getAll({ periodeId: resolvedActive.id }),
+        queueSettingsApi.getByPeriode(resolvedActive.id).catch(() => null),
       ]);
 
       setRegistrations([...regs].sort((a, b) => a.queue_number - b.queue_number));

@@ -6,7 +6,7 @@ import { registrationApi, queueApi } from "@/lib/api";
 import type { Registration } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
   Search,
@@ -319,6 +319,7 @@ export default function AdminDashboard() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Detail Warga</DialogTitle>
+            <DialogDescription>Informasi lengkap dan aksi untuk data antrian ini.</DialogDescription>
           </DialogHeader>
           {selectedReg && (
             <div className="space-y-3">
@@ -371,6 +372,7 @@ export default function AdminDashboard() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Antrian Terlewat ({pending.length})</DialogTitle>
+            <DialogDescription>Antrian yang dilewati dan belum dilayani.</DialogDescription>
           </DialogHeader>
           <div className="space-y-2 max-h-80 overflow-y-auto">
             {pending.length === 0 ? (
@@ -402,6 +404,7 @@ export default function AdminDashboard() {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Tambah Periode</DialogTitle>
+            <DialogDescription>Buat periode baru untuk sesi antrian.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <Input

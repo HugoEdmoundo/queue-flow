@@ -4,19 +4,25 @@ import { periodeApi, registrationApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { CheckCircle, UserPlus, AlertTriangle, User, CreditCard, MapPin, Loader2, ArrowRight } from "lucide-react";
 import type { Registration } from "@/lib/api";
 
+// Store raw digits only, display with slash, send with colon "XXX:XXX"
 function normalizeRtRw(value: string): string {
-  const digits = value.replace(/\D/g, "");
-  if (digits.length >= 6) return `${digits.slice(0, 3)}:${digits.slice(3, 6)}`;
-  return value;
+  const digits = value.replace(/\D/g, "").slice(0, 6);
+  if (digits.length === 6) {
+    return `${digits.slice(0, 3)}:${digits.slice(3, 6)}`;
+  }
+  // pad to ensure exactly XXX:XXX
+  const rt = digits.slice(0, 3).padStart(3, "0");
+  const rw = digits.slice(3).padEnd(3, "0");
+  return `${rt}:${rw}`;
 }
 
 function isValidRtRw(value: string): boolean {
-  return /^\d{3}:\d{3}$/.test(normalizeRtRw(value));
+  return value.replace(/\D/g, "").length === 6;
 }
 
 type FieldError = { name?: string; kk?: string; rtRw?: string };
@@ -37,7 +43,7 @@ export default function Register() {
   if (!name.trim()) errors.name = "Nama lengkap wajib diisi";
   if (kkNumber.length > 0 && kkNumber.length < 16) errors.kk = `Masih kurang ${16 - kkNumber.length} digit`;
   if (!kkNumber) errors.kk = "Nomor KK wajib diisi";
-  if (rtRw && !isValidRtRw(rtRw)) errors.rtRw = "Format harus 3 digit / 3 digit";
+  if (rtRw && !isValidRtRw(rtRw)) errors.rtRw = "Harus 6 digit total (RT 3 digit + RW 3 digit)";
   if (!rtRw) errors.rtRw = "RT/RW wajib diisi";
 
   const touch = (field: string) => setTouched((p) => ({ ...p, [field]: true }));
@@ -51,6 +57,10 @@ export default function Register() {
     if (Object.keys(errors).length > 0) return;
 
     const normalized = normalizeRtRw(rtRw);
+    if (!/^\d{3}:\d{3}$/.test(normalized)) {
+      toast.error("Format RT/RW tidak valid");
+      return;
+    }
     setSubmitting(true);
     try {
       const activePeriode = await periodeApi.getActive();
@@ -231,14 +241,22 @@ export default function Register() {
                   <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     id="rtrw"
-                    value={rtRw.replace(":", "/")}
-                    onChange={(e) => { setRtRw(e.target.value.replace(/[^\d/]/g, "")); setDuplicate(null); }}
+                    value={(() => {
+                      const d = rtRw.replace(/\D/g, "");
+                      if (d.length > 3) return `${d.slice(0, 3)}/${d.slice(3, 6)}`;
+                      return d;
+                    })()}
+                    onChange={(e) => {
+                      // Only keep digits, max 6
+                      const digits = e.target.value.replace(/\D/g, "").slice(0, 6);
+                      setRtRw(digits);
+                      setDuplicate(null);
+                    }}
                     onBlur={() => touch("rtRw")}
                     placeholder="Contoh: 001/002"
                     inputMode="numeric"
                     className={`pl-9 transition-colors ${touched.rtRw && errors.rtRw ? "border-destructive focus-visible:ring-destructive/30" : isValidRtRw(rtRw) && rtRw ? "border-green-500 focus-visible:ring-green-500/30" : ""}`}
-                  />
-                </div>
+                  />                </div>
                 {touched.rtRw && errors.rtRw ? (
                   <p className="text-xs text-destructive flex items-center gap-1">
                     <AlertTriangle className="w-3 h-3" /> {errors.rtRw}
