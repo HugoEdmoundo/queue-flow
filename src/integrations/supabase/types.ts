@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      periodes: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       queue_settings: {
         Row: {
           created_at: string
@@ -21,6 +45,7 @@ export type Database = {
           current_referral_code: string | null
           id: string
           next_queue_counter: number | null
+          periode_id: string | null
           updated_at: string
         }
         Insert: {
@@ -29,6 +54,7 @@ export type Database = {
           current_referral_code?: string | null
           id?: string
           next_queue_counter?: number | null
+          periode_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -37,9 +63,18 @@ export type Database = {
           current_referral_code?: string | null
           id?: string
           next_queue_counter?: number | null
+          periode_id?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "queue_settings_periode_id_fkey"
+            columns: ["periode_id"]
+            isOneToOne: false
+            referencedRelation: "periodes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       registrations: {
         Row: {
@@ -47,6 +82,7 @@ export type Database = {
           id: string
           kk_number: string
           name: string
+          periode_id: string | null
           queue_number: number
           referral_code: string
           rt_rw: string
@@ -58,6 +94,7 @@ export type Database = {
           id?: string
           kk_number: string
           name: string
+          periode_id?: string | null
           queue_number: number
           referral_code: string
           rt_rw: string
@@ -69,13 +106,22 @@ export type Database = {
           id?: string
           kk_number?: string
           name?: string
+          periode_id?: string | null
           queue_number?: number
           referral_code?: string
           rt_rw?: string
           status?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "registrations_periode_id_fkey"
+            columns: ["periode_id"]
+            isOneToOne: false
+            referencedRelation: "periodes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
