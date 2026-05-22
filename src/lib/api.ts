@@ -1,5 +1,5 @@
-const BASE_URL = (import.meta.env.VITE_API_URL ?? "https://api-queue.hugoedm.fun").replace(/\/$/, "");
-const WS_URL = BASE_URL.replace(/^https/, "wss").replace(/^http/, "ws");
+// Supabase-backed API layer (replaces external REST API)
+import { supabase } from "@/integrations/supabase/client";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -11,6 +11,8 @@ export interface Periode {
   updated_at: string;
 }
 
+export type RegStatus = "waiting" | "serving" | "served" | "pending";
+
 export interface Registration {
   id: string;
   name: string;
@@ -18,7 +20,7 @@ export interface Registration {
   rt_rw: string;
   referral_code: string;
   queue_number: number;
-  status: "waiting" | "serving" | "served" | "pending";
+  status: RegStatus;
   periode_id: string;
   created_at: string;
   updated_at: string;
@@ -36,186 +38,282 @@ export interface QueueSettings {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { "Content-Type": "application/json", ...init?.headers },
-    ...init,
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => res.statusText);
-    try {
-      const json = JSON.parse(text);
-      throw new Error(json.detail ?? json.message ?? text);
-    } catch (parseErr) {
-      if (parseErr instanceof SyntaxError) throw new Error(text || `HTTP ${res.status}`);
-      throw parseErr;
-    }
+function genReferralCode(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no easily-confused chars
+  let out = "";
+  for (let i = 0; i < 6; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  return out;
+}
+
+async function uniqueReferralCode(): Promise<string> {
+  for (let i = 0; i < 8; i++) {
+    const code = genReferralCode();
+    const { data } = await supabase
+      .from("registrations")
+      .select("id")
+      .eq("referral_code", code)
+      .maybeSingle();
+    if (!data) return code;
   }
-  if (res.status === 204 || res.headers.get("content-length") === "0") {
-    return undefined as T;
-  }
-  return res.json() as Promise<T>;
+  return genReferralCode() + Date.now().toString(36).slice(-2).toUpperCase();
 }
 
 // ── Periodes ───────────────────────────────────────────────────────────────
 
 export const periodeApi = {
-  getAll: () => request<Periode[]>("/api/periodes"),
-
-  // Response: { message: string, data: Periode }
-  // Falls back to getAll() if /active returns 404
-  getActive: async (): Promise<Periode | null> => {
-    try {
-      const res = await request<{ message: string; data: Periode }>("/api/periodes/active");
-      return res?.data ?? null;
-    } catch {
-      // Fallback: derive from getAll if /active not available
-      try {
-        const all = await request<Periode[]>("/api/periodes");
-        return all.find((p) => p.is_active) ?? null;
-      } catch {
-        return null;
-      }
-    }
+  getAll: async (): Promise<Periode[]> => {
+    const { data, error } = await supabase
+      .from("periodes")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []) as Periode[];
   },
 
-  create: (name: string) =>
-    request<Periode>("/api/periodes", {
-      method: "POST",
-      body: JSON.stringify({ name, is_active: false }),
-    }),
+  getActive: async (): Promise<Periode | null> => {
+    const { data, error } = await supabase
+      .from("periodes")
+      .select("*")
+      .eq("is_active", true)
+      .maybeSingle();
+    if (error) throw error;
+    return (data ?? null) as Periode | null;
+  },
 
-  // PATCH /api/periodes/{id}/activate
-  activate: (id: string) =>
-    request<Periode>(`/api/periodes/${id}/activate`, { method: "PATCH" }),
+  create: async (name: string): Promise<Periode> => {
+    const { data, error } = await supabase
+      .from("periodes")
+      .insert({ name, is_active: false })
+      .select()
+      .single();
+    if (error) throw error;
+    // Auto-create the linked queue_settings row
+    await supabase.from("queue_settings").insert({
+      periode_id: data.id,
+      current_queue_number: 0,
+      current_referral_code: "",
+      next_queue_counter: 1,
+    });
+    return data as Periode;
+  },
 
-  update: (id: string, data: Partial<Pick<Periode, "name" | "is_active">>) =>
-    request<Periode>(`/api/periodes/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify(data),
-    }),
+  activate: async (id: string): Promise<Periode> => {
+    // Deactivate any active periode first to satisfy the unique index
+    await supabase.from("periodes").update({ is_active: false }).eq("is_active", true);
+    const { data, error } = await supabase
+      .from("periodes")
+      .update({ is_active: true })
+      .eq("id", id)
+      .select()
+      .single();
+    if (error) throw error;
+    // Ensure queue_settings exists for it
+    const { data: s } = await supabase
+      .from("queue_settings")
+      .select("id")
+      .eq("periode_id", id)
+      .maybeSingle();
+    if (!s) {
+      await supabase.from("queue_settings").insert({
+        periode_id: id,
+        current_queue_number: 0,
+        current_referral_code: "",
+        next_queue_counter: 1,
+      });
+    }
+    return data as Periode;
+  },
 
-  delete: (id: string) =>
-    request<{ message: string }>(`/api/periodes/${id}`, { method: "DELETE" }),
+  delete: async (id: string) => {
+    const { error } = await supabase.from("periodes").delete().eq("id", id);
+    if (error) throw error;
+  },
 };
 
 // ── Registrations ──────────────────────────────────────────────────────────
-// rt_rw must be exactly "XXX:XXX" (3 digits : 3 digits)
 
 export const registrationApi = {
-  getAll: (params?: { periodeId?: string; status?: string }) => {
-    const qs = params
-      ? "?" + new URLSearchParams(params as Record<string, string>).toString()
-      : "";
-    return request<Registration[]>(`/api/registrations${qs}`);
+  getAll: async (params?: { periodeId?: string; status?: string }): Promise<Registration[]> => {
+    let q = supabase.from("registrations").select("*").order("queue_number", { ascending: true });
+    if (params?.periodeId) q = q.eq("periode_id", params.periodeId);
+    if (params?.status) q = q.eq("status", params.status);
+    const { data, error } = await q;
+    if (error) throw error;
+    return (data ?? []) as Registration[];
   },
 
-  create: (data: {
+  create: async (input: {
     name: string;
-    kk_number: string; // exactly 16 digits
-    rt_rw: string;     // exactly "XXX:XXX"
+    kk_number: string;
+    rt_rw: string;
     periode_id: string;
-  }) =>
-    request<Registration>("/api/registrations", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
+  }): Promise<Registration> => {
+    // Fetch & increment counter atomically-ish
+    const { data: s, error: sErr } = await supabase
+      .from("queue_settings")
+      .select("*")
+      .eq("periode_id", input.periode_id)
+      .maybeSingle();
+    if (sErr) throw sErr;
 
-  update: (id: string, data: Partial<Pick<Registration, "status" | "name" | "kk_number" | "rt_rw">>) =>
-    request<Registration>(`/api/registrations/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify(data),
-    }),
+    let settings = s;
+    if (!settings) {
+      const { data: created, error: cErr } = await supabase
+        .from("queue_settings")
+        .insert({
+          periode_id: input.periode_id,
+          current_queue_number: 0,
+          current_referral_code: "",
+          next_queue_counter: 1,
+        })
+        .select()
+        .single();
+      if (cErr) throw cErr;
+      settings = created;
+    }
 
-  delete: (id: string) =>
-    request<void>(`/api/registrations/${id}`, { method: "DELETE" }),
+    const queueNumber = settings.next_queue_counter ?? 1;
+    const referralCode = await uniqueReferralCode();
+
+    const { data: reg, error: rErr } = await supabase
+      .from("registrations")
+      .insert({
+        name: input.name,
+        kk_number: input.kk_number,
+        rt_rw: input.rt_rw,
+        referral_code: referralCode,
+        queue_number: queueNumber,
+        status: "waiting",
+        periode_id: input.periode_id,
+      })
+      .select()
+      .single();
+    if (rErr) throw rErr;
+
+    await supabase
+      .from("queue_settings")
+      .update({ next_queue_counter: queueNumber + 1 })
+      .eq("id", settings.id);
+
+    return reg as Registration;
+  },
+
+  update: async (id: string, patch: Partial<Pick<Registration, "status" | "name" | "kk_number" | "rt_rw">>) => {
+    const { data, error } = await supabase
+      .from("registrations")
+      .update(patch)
+      .eq("id", id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data as Registration;
+  },
+
+  delete: async (id: string) => {
+    const { error } = await supabase.from("registrations").delete().eq("id", id);
+    if (error) throw error;
+  },
 };
 
 // ── Queue Settings ─────────────────────────────────────────────────────────
 
 export const queueSettingsApi = {
-  getByPeriode: (periodeId: string) =>
-    request<QueueSettings>(`/api/queue-settings/periode/${periodeId}`),
+  getByPeriode: async (periodeId: string): Promise<QueueSettings | null> => {
+    const { data, error } = await supabase
+      .from("queue_settings")
+      .select("*")
+      .eq("periode_id", periodeId)
+      .maybeSingle();
+    if (error) throw error;
+    return (data ?? null) as QueueSettings | null;
+  },
 
-  create: (data: {
+  create: async (input: {
     periode_id: string;
     current_queue_number?: number;
     current_referral_code?: string;
     next_queue_counter?: number;
-  }) =>
-    request<QueueSettings>("/api/queue-settings", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
+  }): Promise<QueueSettings> => {
+    const { data, error } = await supabase
+      .from("queue_settings")
+      .insert({
+        periode_id: input.periode_id,
+        current_queue_number: input.current_queue_number ?? 0,
+        current_referral_code: input.current_referral_code ?? "",
+        next_queue_counter: input.next_queue_counter ?? 1,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return data as QueueSettings;
+  },
 };
 
-// ── Queue Operations ───────────────────────────────────────────────────────
+// ── Queue operations ───────────────────────────────────────────────────────
+
+async function getActivePeriodeId(): Promise<string> {
+  const p = await periodeApi.getActive();
+  if (!p) throw new Error("Tidak ada periode aktif");
+  return p.id;
+}
+
+async function syncSettings(periodeId: string, current?: Registration | null) {
+  await supabase
+    .from("queue_settings")
+    .update({
+      current_queue_number: current?.queue_number ?? 0,
+      current_referral_code: current?.referral_code ?? "",
+    })
+    .eq("periode_id", periodeId);
+}
 
 export const queueApi = {
-  next: () =>
-    request<{ message: string; current_queue?: Registration }>(
-      "/api/queue/next",
-      { method: "POST" }
-    ),
-  pending: () =>
-    request<{ message: string; current_serving?: Partial<Registration>; pending?: Partial<Registration> }>(
-      "/api/queue/pending",
-      { method: "POST" }
-    ),
-  back: () =>
-    request<{ message: string; current_serving?: Partial<Registration>; previous_serving?: Partial<Registration> }>(
-      "/api/queue/back",
-      { method: "POST" }
-    ),
+  next: async () => {
+    const periodeId = await getActivePeriodeId();
+    const regs = await registrationApi.getAll({ periodeId });
+    const serving = regs.find((r) => r.status === "serving");
+    if (serving) {
+      await supabase.from("registrations").update({ status: "served" }).eq("id", serving.id);
+    }
+    const nextOne = regs.filter((r) => r.status === "waiting").sort((a, b) => a.queue_number - b.queue_number)[0];
+    if (nextOne) {
+      await supabase.from("registrations").update({ status: "serving" }).eq("id", nextOne.id);
+      await syncSettings(periodeId, nextOne);
+      return { message: "ok", current_queue: nextOne };
+    }
+    await syncSettings(periodeId, null);
+    return { message: "no more waiting" };
+  },
+
+  back: async () => {
+    const periodeId = await getActivePeriodeId();
+    const regs = await registrationApi.getAll({ periodeId });
+    const serving = regs.find((r) => r.status === "serving");
+    const lastServed = [...regs.filter((r) => r.status === "served")].sort(
+      (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
+    )[0];
+    if (!lastServed) throw new Error("Tidak ada antrian sebelumnya");
+    if (serving) {
+      await supabase.from("registrations").update({ status: "waiting" }).eq("id", serving.id);
+    }
+    await supabase.from("registrations").update({ status: "serving" }).eq("id", lastServed.id);
+    await syncSettings(periodeId, lastServed);
+    return { message: "ok", current_serving: lastServed };
+  },
+
+  pending: async () => {
+    const periodeId = await getActivePeriodeId();
+    const regs = await registrationApi.getAll({ periodeId });
+    const serving = regs.find((r) => r.status === "serving");
+    if (!serving) throw new Error("Tidak ada antrian yang sedang dilayani");
+    await supabase.from("registrations").update({ status: "pending" }).eq("id", serving.id);
+    const nextOne = regs.filter((r) => r.status === "waiting").sort((a, b) => a.queue_number - b.queue_number)[0];
+    if (nextOne) {
+      await supabase.from("registrations").update({ status: "serving" }).eq("id", nextOne.id);
+      await syncSettings(periodeId, nextOne);
+    } else {
+      await syncSettings(periodeId, null);
+    }
+    return { message: "ok", pending: serving };
+  },
 };
-
-// ── WebSocket with auto-reconnect ──────────────────────────────────────────
-
-export function createWebSocket(onMessage: (data: unknown) => void): { close: () => void } {
-  let ws: WebSocket | null = null;
-  let closed = false;
-  let retryTimeout: ReturnType<typeof setTimeout> | null = null;
-  let retryDelay = 1000;
-
-  function connect() {
-    if (closed) return;
-    ws = new WebSocket(`${WS_URL}/ws`);
-
-    ws.onopen = () => {
-      retryDelay = 1000;
-    };
-
-    ws.onmessage = (e) => {
-      try {
-        onMessage(JSON.parse(e.data));
-      } catch {
-        // ignore non-JSON frames
-      }
-    };
-
-    ws.onclose = () => {
-      ws = null;
-      if (!closed) {
-        retryTimeout = setTimeout(() => {
-          retryDelay = Math.min(retryDelay * 2, 30000);
-          connect();
-        }, retryDelay);
-      }
-    };
-
-    ws.onerror = () => {
-      if (ws?.readyState !== WebSocket.CLOSED) ws?.close();
-    };
-  }
-
-  connect();
-
-  return {
-    close() {
-      closed = true;
-      if (retryTimeout) { clearTimeout(retryTimeout); retryTimeout = null; }
-      if (ws && ws.readyState !== WebSocket.CLOSED) ws.close();
-      ws = null;
-    },
-  };
-}

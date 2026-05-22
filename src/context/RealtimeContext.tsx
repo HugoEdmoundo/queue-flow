@@ -1,8 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from "react";
-import { periodeApi, registrationApi, queueSettingsApi, createWebSocket } from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";
+import { periodeApi, registrationApi, queueSettingsApi } from "@/lib/api";
 import type { Periode, Registration, QueueSettings } from "@/lib/api";
-
-const POLL_MS = 4000;
 
 interface RealtimeState {
   periodes: Periode[];
@@ -10,7 +9,7 @@ interface RealtimeState {
   registrations: Registration[];
   settings: QueueSettings | null;
   loading: boolean;
-  refetch: () => void;
+  refetch: () => Promise<void>;
   createPeriode: (name: string) => Promise<Periode>;
   activatePeriode: (id: string) => Promise<void>;
 }
@@ -29,30 +28,24 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     if (busyRef.current) return;
     busyRef.current = true;
     try {
-      // Fetch periodes + active in parallel
-      const [allPeriodes, active] = await Promise.all([
-        periodeApi.getAll(),
-        periodeApi.getActive(),
-      ]);
+      const [allPeriodes, active] = await Promise.all([periodeApi.getAll(), periodeApi.getActive()]);
       setPeriodes(allPeriodes);
-      const resolvedActive = active ?? null;
-      setActivePeriode(resolvedActive);
+      setActivePeriode(active);
 
-      if (!resolvedActive?.id) {
+      if (!active?.id) {
         setRegistrations([]);
         setSettings(null);
         return;
       }
 
       const [regs, s] = await Promise.all([
-        registrationApi.getAll({ periodeId: resolvedActive.id }),
-        queueSettingsApi.getByPeriode(resolvedActive.id).catch(() => null),
+        registrationApi.getAll({ periodeId: active.id }),
+        queueSettingsApi.getByPeriode(active.id).catch(() => null),
       ]);
-
       setRegistrations([...regs].sort((a, b) => a.queue_number - b.queue_number));
       setSettings(s);
     } catch {
-      // silent — will retry
+      // silent
     } finally {
       busyRef.current = false;
       setLoading(false);
@@ -61,27 +54,25 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     fetchAll();
-    const ws = createWebSocket(() => fetchAll());
-    const poll = setInterval(fetchAll, POLL_MS);
+    const channel = supabase
+      .channel("queue-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "registrations" }, () => fetchAll())
+      .on("postgres_changes", { event: "*", schema: "public", table: "queue_settings" }, () => fetchAll())
+      .on("postgres_changes", { event: "*", schema: "public", table: "periodes" }, () => fetchAll())
+      .subscribe();
     return () => {
-      ws.close();
-      clearInterval(poll);
+      supabase.removeChannel(channel);
     };
   }, [fetchAll]);
 
   const createPeriode = async (name: string) => {
-    const data = await periodeApi.create(name);
+    const p = await periodeApi.create(name);
     await fetchAll();
-    return data;
+    return p;
   };
 
   const activatePeriode = async (id: string) => {
     await periodeApi.activate(id);
-    try {
-      await queueSettingsApi.getByPeriode(id);
-    } catch {
-      await queueSettingsApi.create({ periode_id: id });
-    }
     await fetchAll();
   };
 
@@ -100,8 +91,8 @@ export function useRealtime() {
   return ctx;
 }
 
-// Convenience derived selectors
-export function useQueueData() {
+// Convenience selectors — keep arg-compatible signature with previous version
+export function useQueueData(_periodeId?: string) {
   const { registrations, settings, loading, refetch } = useRealtime();
   const waiting = registrations.filter((r) => r.status === "waiting");
   const served = registrations.filter((r) => r.status === "served");
